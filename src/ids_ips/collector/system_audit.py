@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import json
 import platform
@@ -20,12 +20,23 @@ class SystemSnapshot:
     cpu_count_physical: int
     memory_total: int
     processes_count: int
+    disk_count: int
+    net_if_count: int
+    tcp_conn_count: int
+    udp_conn_count: int
 
 
 def collect_system_snapshot() -> SystemSnapshot:
     """Собрать базовую информацию о системе (аналог части тестов Lynis)."""
     vm = psutil.virtual_memory()
     processes = list(psutil.process_iter(attrs=["pid"]))
+    disks = psutil.disk_partitions(all=False)
+    net_if = psutil.net_if_addrs()
+    conns: List[psutil._common.sconn] = psutil.net_connections()
+
+    tcp_conns = [c for c in conns if c.type == psutil.SOCK_STREAM]
+    udp_conns = [c for c in conns if c.type == psutil.SOCK_DGRAM]
+
     return SystemSnapshot(
         platform_system=platform.system(),
         platform_release=platform.release(),
@@ -34,6 +45,10 @@ def collect_system_snapshot() -> SystemSnapshot:
         cpu_count_physical=psutil.cpu_count(logical=False) or 0,
         memory_total=int(vm.total),
         processes_count=len(processes),
+        disk_count=len(disks),
+        net_if_count=len(net_if),
+        tcp_conn_count=len(tcp_conns),
+        udp_conn_count=len(udp_conns),
     )
 
 

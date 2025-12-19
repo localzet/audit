@@ -41,11 +41,37 @@ def audit(
 
 
 @app.command()
+def collect_dataset(
+    runs: int = typer.Option(
+        10,
+        "--runs",
+        help="Сколько аудитов выполнить и сохранить в датасет.",
+    ),
+    dataset_dir: Path = typer.Option(
+        Path("artifacts/dataset"),
+        "--dataset-dir",
+        help="Куда складывать JSON-аудиты (по одному файлу на запуск).",
+    ),
+):
+    """Выполнить несколько аудитов и собрать исходный датасет для ML."""
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    console.rule("[bold cyan]Dataset collection")
+
+    for i in range(runs):
+        cfg = AuditConfig(output_dir=dataset_dir)
+        path = run_basic_audit(cfg)
+        # Переименуем, чтобы не перезаписывать один и тот же файл
+        final_path = dataset_dir / f"system_snapshot_{i:04d}.json"
+        path.replace(final_path)
+        console.print(f"[green]Сэмпл #{i}[/green]: {final_path}")
+
+
+@app.command()
 def train_baseline(
     data_dir: Path = typer.Option(
-        Path("artifacts"),
+        Path("artifacts/dataset"),
         "--data-dir",
-        help="Директория с JSON-аудитами (пока ожидается один файл).",
+        help="Директория с JSON-аудитами (каждый файл — один сэмпл).",
     ),
     model_path: Path = typer.Option(
         Path("artifacts") / "models" / "baseline_iforest.joblib",
@@ -54,12 +80,21 @@ def train_baseline(
     ),
 ):
     """Обучить простую baseline-модель по собранным аудитам."""
-    json_path = data_dir / "system_snapshot.json"
-    if not json_path.exists():
-        typer.secho(f"Файл аудита не найден: {json_path}", fg=typer.colors.RED)
+    if not data_dir.exists():
+        typer.secho(f"Директория с данными не найдена: {data_dir}", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
-    df = extract_basic_features(json_path)
+    json_files = sorted(p for p in data_dir.glob("*.json") if p.is_file())
+    if not json_files:
+        typer.secho(f"В {data_dir} нет JSON-аудитов", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    # Преобразуем все аудиты в общий датафрейм
+    import pandas as pd
+
+    frames = [extract_basic_features(p) for p in json_files]
+    df = pd.concat(frames, ignore_index=True)
+
     model = BaselineAnomalyModel().fit(df)
     model.save(model_path)
     console.print(f"[green]Модель сохранена:[/green] {model_path}")
@@ -75,7 +110,7 @@ def score(
     data_dir: Path = typer.Option(
         Path("artifacts"),
         "--data-dir",
-        help="Директория с JSON-аудитами.",
+        help="Директория с JSON-аудитами (по умолчанию одиночный аудит).",
     ),
 ):
     """Оценить текущий аудит с помощью baseline-модели."""
