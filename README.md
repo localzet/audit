@@ -41,6 +41,20 @@ pip install -r requirements.txt
 python -m ids_ips.cli audit system
 ```
 
+4. Собрать небольшой датасет аудитов и обучить baseline‑модель:
+
+```powershell
+# Собрать N аудитов в artifacts/dataset
+python -m ids_ips.cli collect_dataset --runs 20
+
+# Обучить IsolationForest на собранных фичах
+python -m ids_ips.cli train_baseline
+
+# Оценить последний одиночный аудит
+python -m ids_ips.cli audit system
+python -m ids_ips.cli score
+```
+
 ### Идеи для научной работы
 - **Типы данных**:
   - логи ОС/сервисов, сетевой трафик (pcap), конфигурации, процессы, открытые порты;

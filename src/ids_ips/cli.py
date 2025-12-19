@@ -7,9 +7,10 @@ from rich.console import Console
 from rich.table import Table
 
 from ids_ips.config import AuditConfig
-from ids_ips.collector.system_audit import run_basic_audit
+from ids_ips.collector.system_audit import run_basic_audit, load_audit_json
 from ids_ips.features.basic_features import extract_basic_features
 from ids_ips.models.baseline import BaselineAnomalyModel
+from ids_ips.logging_utils import setup_logging
 
 app = typer.Typer(help="IDS/IPS ML Audit Framework (Lynis-like)")
 console = Console()
@@ -34,9 +35,33 @@ def audit(
         raise typer.Exit(code=1)
 
     cfg = AuditConfig(output_dir=output_dir)
+    setup_logging(output_dir)
 
     console.rule("[bold cyan]System audit")
     audit_path = run_basic_audit(cfg)
+
+    # Краткий отчёт по ключевым метрикам
+    data = load_audit_json(audit_path)
+    table = Table(title="System snapshot summary")
+    table.add_column("metric")
+    table.add_column("value", justify="right")
+
+    for key in [
+        "platform_system",
+        "platform_release",
+        "cpu_count_logical",
+        "cpu_count_physical",
+        "memory_total",
+        "processes_count",
+        "disk_count",
+        "net_if_count",
+        "tcp_conn_count",
+        "udp_conn_count",
+    ]:
+        if key in data:
+            table.add_row(key, str(data[key]))
+
+    console.print(table)
     console.print(f"[green]Аудит завершён.[/green] JSON: {audit_path}")
 
 
